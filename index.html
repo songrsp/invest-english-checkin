@@ -130,6 +130,14 @@
   .bubble-spk:hover{opacity:1}
   .chat-input{display:flex;gap:8px;align-items:flex-end}
   .chat-input .ai-ta{flex:1;margin:0}
+  /* 生词本/错题本/复习/听写 */
+  .vrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin:6px 0;font-size:14px}
+  .vrow .ven{font-weight:600}
+  .vrow .vzh{color:var(--dim);font-size:13px}
+  .vdel{border:none;background:none;color:var(--faint);cursor:pointer;font-size:13px}
+  .vbadge{font-size:11px;color:var(--faint);border:1px solid var(--line);border-radius:99px;padding:1px 7px}
+  .dict-mark .ok{color:var(--green);font-weight:600}
+  .dict-mark .miss{color:#b91c1c;text-decoration:underline dotted}
 </style>
 </head>
 <body>
@@ -178,13 +186,30 @@
     </div>
     <div class="word-bar">
       <span class="idx" id="wIdx"></span>
-      <span style="display:flex;gap:8px">
+      <span style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
         <button class="ai-btn" id="wSpeak">🔊 读</button>
+        <button class="ai-btn" id="wStar">⭐ 收藏</button>
         <button class="ai-btn" id="wExplain">🤖 AI 讲解</button>
         <button class="btn" id="wNext">下一个 →</button>
       </span>
     </div>
     <div class="ai-out" id="wordOut"></div>
+  </div>
+
+  <!-- 单词复习（间隔重复） -->
+  <div class="card" id="reviewCard">
+    <div class="sec-t">🔁 单词复习（间隔重复）· 待复习 <span id="dueCount">0</span></div>
+    <div id="revEmpty" class="ai-loading" style="font-size:13px">还没有到期要复习的词。去单词卡点 <b>⭐ 收藏</b>，它们会按记忆曲线排进来。</div>
+    <div id="revBox" style="display:none;text-align:center;padding:6px 0">
+      <div id="revWord" style="font-size:24px;font-weight:700"></div>
+      <div id="revZh" style="font-size:18px;color:var(--blue);margin-top:8px;min-height:24px"></div>
+      <div id="revReveal" style="margin-top:12px"><button class="btn" id="revShow">显示答案</button></div>
+      <div id="revGrade" style="display:none;gap:8px;justify-content:center;margin-top:12px">
+        <button class="ai-btn" id="revBad">😵 不认识</button>
+        <button class="ai-btn" id="revGood">😎 认识</button>
+        <button class="ai-btn" id="revSpeak">🔊</button>
+      </div>
+    </div>
   </div>
 
   <!-- AI 学习助手 -->
@@ -218,6 +243,40 @@
     </div>
   </div>
 
+  <!-- 听写练习 -->
+  <div class="card ai-card">
+    <div class="sec-t">✍️ 听写练习（AI 出句 → 听 → 打出来）</div>
+    <div class="ai-actions">
+      <button class="ai-btn" id="dictNew">🎧 出一句并朗读</button>
+      <button class="ai-btn" id="dictReplay" disabled>🔊 再读一遍</button>
+    </div>
+    <textarea class="ai-ta" id="dictIn" placeholder="把听到的英文打在这里…" style="margin-top:10px"></textarea>
+    <button class="ai-btn" id="dictCheck" disabled>提交对照</button>
+    <div class="ai-out" id="dictOut"></div>
+  </div>
+
+  <!-- 生词本 -->
+  <div class="card">
+    <div class="sec-t" style="display:flex;justify-content:space-between;align-items:center">
+      <span>📒 生词本（<span id="vocabCount">0</span>）</span>
+      <button class="btn" id="vocabToggle">展开</button>
+    </div>
+    <div id="vocabList" style="display:none;margin-top:10px"></div>
+  </div>
+
+  <!-- 错题本 -->
+  <div class="card">
+    <div class="sec-t" style="display:flex;justify-content:space-between;align-items:center">
+      <span>❌ 错题本（<span id="mistCount">0</span>）</span>
+      <span style="display:flex;gap:8px">
+        <button class="ai-btn" id="mistRedo">重练</button>
+        <button class="btn" id="mistToggle">展开</button>
+      </span>
+    </div>
+    <div class="ai-out" id="mistRedoOut"></div>
+    <div id="mistList" style="display:none;margin-top:10px"></div>
+  </div>
+
   <!-- HEATMAP -->
   <div class="card">
     <div class="sec-t">最近 35 天</div>
@@ -248,6 +307,11 @@
     打卡记录保存在本浏览器本地（不上传）。建议用固定浏览器打开并加书签。<br>
     与《投资×英语 同步学习方案》《我的美股投资学习路线》配套使用。
     <br><button class="reset" id="resetBtn">清空所有打卡记录</button>
+    <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button class="btn" id="exportBtn">⬇️ 导出备份</button>
+      <button class="btn" id="importBtn">⬆️ 导入备份</button>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none">
+    </div>
   </div>
 
 </div>
@@ -418,6 +482,9 @@
   renderAll();
   renderWeekend();
   initWord();
+
+  // 暴露当前单词给生词本功能
+  window.IEcurrentWord = function(){ var w = WORDS[((wordIdx%WORDS.length)+WORDS.length)%WORDS.length]; return { en: w[0], zh: w[1] }; };
 })();
 </script>
 <script>
@@ -505,6 +572,7 @@
             if(bi===oi && oi!==item.answer) bn.classList.add("wrong");
           });
           exp.classList.add("show");
+          if(oi !== item.answer && window.IELearn){ window.IELearn.addMistake(item); }
         });
         box.appendChild(b);
       });
@@ -608,6 +676,226 @@
     var hi = "Hi! I'm your English coach. 👋 Let's practice — tell me about a stock or company you're interested in. What does it do?";
     chatAppend("ai", hi); chatHist.push({ r:"Coach", t:hi });
   })();
+
+  // 暴露给其它模块复用
+  window.IEai = { callAI: callAI, speak: speak };
+})();
+</script>
+<script>
+/* ===== 生词本 / 复习(SRS) / 错题本 / 听写 / 备份 ===== */
+(function(){
+  "use strict";
+  var VKEY = "inv_en_vocab_v1", MKEY = "inv_en_mistakes_v1", CKEY = "inv_en_checkins_v1";
+  var DAY = 86400000, INTERVALS = [1, 2, 4, 7, 15, 30];
+
+  function getJSON(k, def){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):def; }catch(e){ return def; } }
+  function setJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function esc(s){ return String(s).replace(/[&<>]/g, function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c]; }); }
+  function on(id, ev, fn){ var el=document.getElementById(id); if(el) el.addEventListener(ev, fn); }
+  function show(el, html){ if(el){ el.innerHTML=html; el.classList.add("show"); } }
+
+  // ---------- 生词本 + 间隔重复 ----------
+  function loadVocab(){ return getJSON(VKEY, []); }
+  function saveVocab(v){ setJSON(VKEY, v); }
+  function addVocab(en, zh){
+    en = String(en||"").trim(); if(!en) return false;
+    var v = loadVocab();
+    if(v.some(function(x){ return x.en.toLowerCase()===en.toLowerCase(); })) return "dup";
+    v.push({ en:en, zh:zh||"", box:0, due:Date.now(), added:Date.now() });
+    saveVocab(v); renderVocab(); renderReview(); return true;
+  }
+  function delVocab(en){ saveVocab(loadVocab().filter(function(x){return x.en!==en;})); renderVocab(); renderReview(); }
+  function dueList(){ var now=Date.now(); return loadVocab().filter(function(x){ return (x.due||0)<=now; }); }
+  function gradeVocab(en, good){
+    var v=loadVocab();
+    for(var i=0;i<v.length;i++){ if(v[i].en===en){
+      if(good){ v[i].box=Math.min((v[i].box||0)+1, INTERVALS.length-1); v[i].due=Date.now()+INTERVALS[v[i].box]*DAY; }
+      else { v[i].box=0; v[i].due=Date.now()+INTERVALS[0]*DAY; }
+      break;
+    }}
+    saveVocab(v);
+  }
+
+  var revCur=null;
+  function renderReview(){
+    var due=dueList();
+    var dc=document.getElementById("dueCount"); if(dc) dc.textContent=due.length;
+    var empty=document.getElementById("revEmpty"), box=document.getElementById("revBox");
+    if(!box) return;
+    if(!due.length){ empty.style.display="block"; box.style.display="none"; revCur=null; return; }
+    empty.style.display="none"; box.style.display="block";
+    if(!revCur || !due.some(function(x){return x.en===revCur.en;})) revCur=due[0];
+    document.getElementById("revWord").textContent=revCur.en;
+    document.getElementById("revZh").textContent="";
+    document.getElementById("revReveal").style.display="block";
+    document.getElementById("revGrade").style.display="none";
+  }
+  function revealAns(){
+    if(!revCur) return;
+    document.getElementById("revZh").textContent=revCur.zh||"（无中文，可点 🔊 听发音）";
+    document.getElementById("revReveal").style.display="none";
+    document.getElementById("revGrade").style.display="flex";
+  }
+  function gradeAndNext(good){ if(!revCur) return; gradeVocab(revCur.en, good); revCur=null; renderReview(); }
+
+  function renderVocab(){
+    var v=loadVocab();
+    var cnt=document.getElementById("vocabCount"); if(cnt) cnt.textContent=v.length;
+    var list=document.getElementById("vocabList"); if(!list) return;
+    if(!v.length){ list.innerHTML='<div class="ai-loading" style="font-size:13px">还没收藏单词。去单词卡点 ⭐ 收藏。</div>'; return; }
+    list.innerHTML="";
+    v.slice().reverse().forEach(function(x){
+      var row=document.createElement("div"); row.className="vrow";
+      row.innerHTML='<span><span class="ven">'+esc(x.en)+'</span> <span class="vzh">'+esc(x.zh||"")+'</span></span>'+
+        '<span style="display:flex;gap:8px;align-items:center"><span class="vbadge">盒'+((x.box||0)+1)+'</span><button class="vdel">删除</button></span>';
+      row.querySelector(".vdel").addEventListener("click", function(){ delVocab(x.en); });
+      list.appendChild(row);
+    });
+  }
+
+  // ---------- 错题本 ----------
+  function loadMist(){ return getJSON(MKEY, []); }
+  function saveMist(m){ setJSON(MKEY, m); }
+  function addMistake(item){
+    if(!item || !item.q) return;
+    var m=loadMist();
+    if(m.some(function(x){return x.q===item.q;})) return;
+    m.push({ q:item.q, options:item.options||[], answer:item.answer, explain:item.explain||"", at:Date.now() });
+    saveMist(m); renderMist();
+  }
+  function delMist(q){ saveMist(loadMist().filter(function(x){return x.q!==q;})); renderMist(); }
+  function renderMist(){
+    var m=loadMist();
+    var cnt=document.getElementById("mistCount"); if(cnt) cnt.textContent=m.length;
+    var list=document.getElementById("mistList"); if(!list) return;
+    if(!m.length){ list.innerHTML='<div class="ai-loading" style="font-size:13px">还没有错题。小测验答错会自动收进来。</div>'; return; }
+    list.innerHTML="";
+    m.slice().reverse().forEach(function(x){
+      var b=document.createElement("div"); b.className="quiz-q";
+      var ans=(x.options||[])[x.answer]||"";
+      b.innerHTML='<div class="qt">'+esc(x.q)+'</div><div style="font-size:13px;color:#14532d">✓ 正确：'+esc(ans)+'</div>'+
+        (x.explain?'<div class="quiz-exp show" style="display:block">'+esc(x.explain)+'</div>':'')+
+        '<button class="vdel" style="margin-top:4px">移除</button>';
+      b.querySelector(".vdel").addEventListener("click", function(){ delMist(x.q); });
+      list.appendChild(b);
+    });
+  }
+  function redoMist(){
+    var m=loadMist(), out=document.getElementById("mistRedoOut");
+    if(!m.length){ show(out, '<span class="ai-loading">没有错题可练。</span>'); return; }
+    out.innerHTML=""; out.classList.add("show");
+    m.slice().sort(function(){return Math.random()-0.5;}).slice(0,5).forEach(function(item, qi){
+      var box=document.createElement("div"); box.className="quiz-q";
+      var qt=document.createElement("div"); qt.className="qt"; qt.textContent=(qi+1)+". "+item.q; box.appendChild(qt);
+      var exp=document.createElement("div"); exp.className="quiz-exp"; exp.textContent="✓ "+(item.explain||"");
+      (item.options||[]).forEach(function(opt, oi){
+        var bt=document.createElement("button"); bt.className="quiz-opt"; bt.textContent=opt;
+        bt.addEventListener("click", function(){
+          if(box.dataset.done) return; box.dataset.done="1";
+          Array.prototype.forEach.call(box.querySelectorAll(".quiz-opt"), function(bn, bi){
+            if(bi===item.answer) bn.classList.add("correct");
+            if(bi===oi && oi!==item.answer) bn.classList.add("wrong");
+          });
+          exp.classList.add("show");
+          if(oi===item.answer) delMist(item.q);
+        });
+        box.appendChild(bt);
+      });
+      box.appendChild(exp); out.appendChild(box);
+    });
+  }
+
+  // ---------- 听写 ----------
+  var dictSentence="";
+  function norm(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9'\s]/g," ").replace(/\s+/g," ").trim(); }
+  function lcsMark(target, typed){
+    var A=norm(target).split(" ").filter(Boolean), B=norm(typed).split(" ").filter(Boolean);
+    var n=A.length, mm=B.length, dp=[];
+    for(var i=0;i<=n;i++){ var row=[]; for(var j=0;j<=mm;j++) row.push(0); dp.push(row); }
+    for(var i=1;i<=n;i++) for(var j=1;j<=mm;j++) dp[i][j]= A[i-1]===B[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
+    var hit=[]; for(var k=0;k<n;k++) hit.push(false);
+    var i2=n, j2=mm;
+    while(i2>0 && j2>0){ if(A[i2-1]===B[j2-1]){ hit[i2-1]=true; i2--; j2--; } else if(dp[i2-1][j2]>=dp[i2][j2-1]) i2--; else j2--; }
+    var correct=0; for(var k=0;k<n;k++) if(hit[k]) correct++;
+    var html=A.map(function(w, idx){ return '<span class="'+(hit[idx]?"ok":"miss")+'">'+esc(w)+'</span>'; }).join(" ");
+    return { score: n? Math.round(correct/n*100):0, html: html };
+  }
+
+  // ---------- 导出 / 导入 ----------
+  function exportAll(){
+    var dump={ v:1, exportedAt:new Date().toISOString(), checkins:getJSON(CKEY,{}), vocab:getJSON(VKEY,[]), mistakes:getJSON(MKEY,[]) };
+    var blob=new Blob([JSON.stringify(dump,null,2)], {type:"application/json"});
+    var url=URL.createObjectURL(blob), a=document.createElement("a");
+    a.href=url; a.download="投资英语打卡-备份-"+new Date().toISOString().slice(0,10)+".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  }
+  function importAll(file){
+    var r=new FileReader();
+    r.onload=function(){
+      try{
+        var d=JSON.parse(r.result);
+        if(d.checkins) setJSON(CKEY, d.checkins);
+        if(d.vocab) setJSON(VKEY, d.vocab);
+        if(d.mistakes) setJSON(MKEY, d.mistakes);
+        alert("导入成功，页面将刷新。"); location.reload();
+      }catch(e){ alert("导入失败：文件格式不对。"); }
+    };
+    r.readAsText(file);
+  }
+
+  // ---------- 事件 ----------
+  on("wStar","click", function(){
+    var w=window.IEcurrentWord ? window.IEcurrentWord() : null; if(!w) return;
+    var r=addVocab(w.en, w.zh), btn=document.getElementById("wStar");
+    btn.textContent = r==="dup" ? "已在生词本" : "⭐ 已收藏";
+    setTimeout(function(){ btn.textContent="⭐ 收藏"; }, 1500);
+  });
+  on("revShow","click", revealAns);
+  on("revGood","click", function(){ gradeAndNext(true); });
+  on("revBad","click", function(){ gradeAndNext(false); });
+  on("revSpeak","click", function(){ if(revCur && window.IEai) window.IEai.speak(revCur.en); });
+  on("vocabToggle","click", function(){ var l=document.getElementById("vocabList"), b=document.getElementById("vocabToggle"); var o=l.style.display==="none"; l.style.display=o?"block":"none"; b.textContent=o?"收起":"展开"; });
+  on("mistToggle","click", function(){ var l=document.getElementById("mistList"), b=document.getElementById("mistToggle"); var o=l.style.display==="none"; l.style.display=o?"block":"none"; b.textContent=o?"收起":"展开"; });
+  on("mistRedo","click", redoMist);
+
+  on("dictNew","click", async function(){
+    var btn=document.getElementById("dictNew"), out=document.getElementById("dictOut");
+    if(!window.IEai) return;
+    btn.disabled=true; var old=btn.textContent; btn.textContent="出题中…"; out.classList.remove("show"); out.innerHTML="";
+    try{
+      var t=await window.IEai.callAI({
+        system:"你是英语听写出题老师。只输出一句英文，不要引号、不要翻译、不要解释。",
+        prompt:"给出一句适合中级学习者听写的英文句子（8-16 个词，主题围绕美股投资或日常），只输出这句英文。",
+        max_tokens:60
+      });
+      dictSentence=String(t).replace(/^["'\s]+|["'\s]+$/g,"").split("\n")[0];
+      document.getElementById("dictIn").value="";
+      document.getElementById("dictReplay").disabled=false;
+      document.getElementById("dictCheck").disabled=false;
+      window.IEai.speak(dictSentence);
+      show(out, '<span class="ai-loading">已朗读，把听到的打在上面，再点"提交对照"。听不清可"再读一遍"。</span>');
+    }catch(e){ show(out, '<span style="color:#b91c1c">出错了：'+esc(e&&e.message?e.message:e)+'</span>'); }
+    finally{ btn.disabled=false; btn.textContent=old; }
+  });
+  on("dictReplay","click", function(){ if(dictSentence && window.IEai) window.IEai.speak(dictSentence); });
+  on("dictCheck","click", function(){
+    var out=document.getElementById("dictOut"); if(!dictSentence) return;
+    var r=lcsMark(dictSentence, document.getElementById("dictIn").value||"");
+    out.innerHTML='<div style="margin-bottom:6px">得分 <b>'+r.score+'</b> / 100</div>'+
+      '<div class="dict-mark" style="line-height:1.9">'+r.html+'</div>'+
+      '<div style="margin-top:8px;font-size:13px;color:var(--dim)">原句：'+esc(dictSentence)+'</div>';
+    out.classList.add("show");
+  });
+
+  on("exportBtn","click", exportAll);
+  on("importBtn","click", function(){ var f=document.getElementById("importFile"); if(f) f.click(); });
+  on("importFile","change", function(e){ if(e.target.files && e.target.files[0]) importAll(e.target.files[0]); });
+
+  // 暴露错题钩子给 AI 脚本
+  window.IELearn = { addVocab: addVocab, addMistake: addMistake };
+
+  renderVocab(); renderMist(); renderReview();
 })();
 </script>
 <script>

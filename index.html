@@ -118,6 +118,18 @@
   .quiz-opt.wrong{background:#fdecec;border-color:#f5c2c2;color:#9b1c1c}
   .quiz-exp{font-size:13px;color:var(--dim);margin-top:6px;display:none}
   .quiz-exp.show{display:block}
+  /* 陪练对话 */
+  .chat-box{max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fbfcfd;margin-bottom:8px;display:flex;flex-direction:column;gap:8px}
+  .chat-row{display:flex;align-items:flex-end;gap:6px}
+  .chat-row.me{justify-content:flex-end}
+  .chat-row .bubble{max-width:82%;padding:8px 11px;border-radius:12px;font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+  .chat-row.me .bubble{background:#dbeafe;color:#1e3a5f;border-bottom-right-radius:4px}
+  .chat-row.ai .bubble{background:#f3f0fb;color:#3b2d5e;border-bottom-left-radius:4px}
+  .chat-row.ai .bubble b{color:#6d28d9}
+  .bubble-spk{border:none;background:none;cursor:pointer;font-size:14px;padding:2px;opacity:.6}
+  .bubble-spk:hover{opacity:1}
+  .chat-input{display:flex;gap:8px;align-items:flex-end}
+  .chat-input .ai-ta{flex:1;margin:0}
 </style>
 </head>
 <body>
@@ -167,6 +179,7 @@
     <div class="word-bar">
       <span class="idx" id="wIdx"></span>
       <span style="display:flex;gap:8px">
+        <button class="ai-btn" id="wSpeak">🔊 读</button>
         <button class="ai-btn" id="wExplain">🤖 AI 讲解</button>
         <button class="btn" id="wNext">下一个 →</button>
       </span>
@@ -187,8 +200,21 @@
     <div style="margin-top:16px">
       <div class="sec-t" style="margin-bottom:8px">🔍 解析英文句子（粘贴财报/新闻里的英文）</div>
       <textarea class="ai-ta" id="sentIn" placeholder="粘贴一句英文，例如：The company raised its full-year guidance on strong data center demand."></textarea>
-      <button class="ai-btn" id="aiSent">解析这句</button>
+      <div style="display:flex;gap:8px">
+        <button class="ai-btn" id="sentSpeak">🔊 读这句</button>
+        <button class="ai-btn" id="aiSent">🔍 解析这句</button>
+      </div>
       <div class="ai-out" id="sentOut"></div>
+    </div>
+  </div>
+
+  <!-- AI 英语陪练 -->
+  <div class="card ai-card">
+    <div class="sec-t">💬 AI 英语陪练（用英文聊，它会顺手纠正你）</div>
+    <div class="chat-box" id="chatBox"></div>
+    <div class="chat-input">
+      <textarea class="ai-ta" id="chatIn" style="min-height:46px" placeholder="用英文说点什么…（回车发送，Shift+回车换行）"></textarea>
+      <button class="ai-btn" id="chatSend">发送</button>
     </div>
   </div>
 
@@ -515,6 +541,73 @@
       show(out, fmt(t));
     }catch(e){ err(out, e); } finally{ busy(btn, false); }
   });
+
+  // ===== 朗读 TTS（浏览器自带，免费） =====
+  function speak(text){
+    text = String(text||"").trim();
+    if(!("speechSynthesis" in window) || !text) return;
+    try{ window.speechSynthesis.cancel(); }catch(e){}
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US"; u.rate = 0.95;
+    try{
+      var vs = window.speechSynthesis.getVoices() || [];
+      var en = vs.filter(function(v){ return /^en[-_]/i.test(v.lang); });
+      var us = en.filter(function(v){ return /US/i.test(v.lang); });
+      if(us[0] || en[0]) u.voice = us[0] || en[0];
+    }catch(e){}
+    window.speechSynthesis.speak(u);
+  }
+  bind("wSpeak", function(){ speak((document.getElementById("wEn").textContent||"").replace(/\s*\/.*$/,"").replace(/\s*\([^)]*\)/,"")); });
+  bind("sentSpeak", function(){ speak(document.getElementById("sentIn").value); });
+
+  // ===== AI 英语陪练（多轮对话，不改 Worker） =====
+  var chatHist = [];
+  var COACH_SYS = "你是友好的英语陪练老师 Coach。和学习者进行英语对话练习（话题可围绕美股投资或日常）。要求：①用英文回复，难度适中（适合 CET-6 中级）；②回复简洁 2-4 句，并在结尾用一个问题引导继续聊；③如果学习者英文有明显错误，回复后另起一行用『💡』加一句简短中文，指出最主要的 1 处错误并给出更地道的说法；没有明显错误就不加。";
+
+  function chatAppend(role, text){
+    var box = document.getElementById("chatBox");
+    var row = document.createElement("div"); row.className = "chat-row " + (role==="user" ? "me" : "ai");
+    var b = document.createElement("div"); b.className = "bubble"; b.innerHTML = fmt(text);
+    row.appendChild(b);
+    if(role==="ai"){
+      var sp = document.createElement("button"); sp.className = "bubble-spk"; sp.textContent = "🔊"; sp.title = "朗读";
+      sp.addEventListener("click", function(){ speak(text.replace(/💡[\s\S]*$/,"")); });
+      row.appendChild(sp);
+    }
+    box.appendChild(row); box.scrollTop = box.scrollHeight;
+  }
+
+  async function chatSend(){
+    var inp = document.getElementById("chatIn");
+    var msg = (inp.value||"").trim();
+    if(!msg) return;
+    inp.value = "";
+    chatAppend("user", msg);
+    chatHist.push({ r:"Learner", t:msg });
+    if(chatHist.length > 12) chatHist = chatHist.slice(-12);
+    var box = document.getElementById("chatBox");
+    var wait = document.createElement("div"); wait.className = "chat-row ai";
+    wait.innerHTML = '<div class="bubble"><span class="ai-loading">…</span></div>';
+    box.appendChild(wait); box.scrollTop = box.scrollHeight;
+    try{
+      var transcript = chatHist.map(function(m){ return m.r + ": " + m.t; }).join("\n");
+      var t = await callAI({
+        system: COACH_SYS,
+        prompt: "对话历史：\n" + transcript + "\n\n请作为 Coach 回复（英文为主，需要时附一句中文纠错）。",
+        max_tokens: 400
+      });
+      wait.remove();
+      chatAppend("ai", t);
+      chatHist.push({ r:"Coach", t:t });
+    }catch(e){ wait.remove(); chatAppend("ai", "（出错了：" + (e && e.message ? e.message : e) + "）"); }
+  }
+  bind("chatSend", chatSend);
+  (function(){
+    var i = document.getElementById("chatIn");
+    if(i) i.addEventListener("keydown", function(e){ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); chatSend(); } });
+    var hi = "Hi! I'm your English coach. 👋 Let's practice — tell me about a stock or company you're interested in. What does it do?";
+    chatAppend("ai", hi); chatHist.push({ r:"Coach", t:hi });
+  })();
 })();
 </script>
 <script>

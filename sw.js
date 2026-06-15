@@ -1,6 +1,6 @@
 /* Service Worker：离线缓存核心文件。
    改版后想强制更新：把下面的 v1 改成 v2、v3…… 重新上传即可。 */
-const CACHE = "inv-en-v2";
+const CACHE = "inv-en-v3";
 const ASSETS = [
   "./",
   "./index.html",

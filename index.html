@@ -196,6 +196,18 @@
     <div class="ai-out" id="wordOut"></div>
   </div>
 
+  <!-- 朗读发音设置 -->
+  <div class="card">
+    <div class="sec-t">🔊 朗读发音</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="voiceSel" style="flex:1;min-width:180px;font:inherit;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff"></select>
+      <button class="ai-btn" id="voiceTest">🔊 试听</button>
+    </div>
+    <div style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6">
+      声音发闷 / 像"公鸭嗓"？iPhone 可下载更自然的语音：<b>设置 → 辅助功能 → 朗读内容 → 声音 → 英语</b>，下载带 <b>"增强 / Enhanced"</b> 或 <b>"高级 / Premium"</b> 的声音（如 Ava、Evan、Samantha、Zoe），下载后回这里选它、点试听。
+    </div>
+  </div>
+
   <!-- 单词复习（间隔重复） -->
   <div class="card" id="reviewCard">
     <div class="sec-t">🔁 单词复习（间隔重复）· 待复习 <span id="dueCount">0</span></div>
@@ -619,9 +631,15 @@
     u.lang = "en-US"; u.rate = 0.95;
     try{
       var vs = window.speechSynthesis.getVoices() || [];
-      var en = vs.filter(function(v){ return /^en[-_]/i.test(v.lang); });
-      var us = en.filter(function(v){ return /US/i.test(v.lang); });
-      if(us[0] || en[0]) u.voice = us[0] || en[0];
+      var pref=null; try{ pref=localStorage.getItem("inv_en_voice"); }catch(e){}
+      var pick = pref ? vs.filter(function(v){ return v.voiceURI===pref || v.name===pref; })[0] : null;
+      if(!pick){
+        var en = vs.filter(function(v){ return /^en[-_]/i.test(v.lang); });
+        var good = en.filter(function(v){ return /(enhanced|premium|siri|natural|neural)/i.test(v.name) && !/compact/i.test(v.name); });
+        var us = en.filter(function(v){ return /US/i.test(v.lang) && !/compact/i.test(v.name); });
+        pick = good[0] || us[0] || en[0];
+      }
+      if(pick) u.voice = pick;
     }catch(e){}
     window.speechSynthesis.speak(u);
   }
@@ -894,6 +912,25 @@
 
   // 暴露错题钩子给 AI 脚本
   window.IELearn = { addVocab: addVocab, addMistake: addMistake };
+
+  // 朗读语音选择
+  function fillVoices(){
+    var sel=document.getElementById("voiceSel"); if(!sel) return;
+    var vs=(window.speechSynthesis && window.speechSynthesis.getVoices())||[];
+    var en=vs.filter(function(v){ return /^en[-_]/i.test(v.lang); });
+    if(!en.length) return;
+    var pref=""; try{ pref=localStorage.getItem("inv_en_voice")||""; }catch(e){}
+    sel.innerHTML="";
+    en.forEach(function(v){
+      var o=document.createElement("option"); o.value=v.voiceURI;
+      o.textContent=v.name+" ("+v.lang+")"; if(v.voiceURI===pref) o.selected=true;
+      sel.appendChild(o);
+    });
+  }
+  on("voiceSel","change", function(e){ try{ localStorage.setItem("inv_en_voice", e.target.value); }catch(_){} });
+  on("voiceTest","click", function(){ if(window.IEai) window.IEai.speak("Revenue growth beat expectations this quarter."); });
+  fillVoices();
+  if(window.speechSynthesis){ try{ window.speechSynthesis.onvoiceschanged=fillVoices; }catch(e){} }
 
   renderVocab(); renderMist(); renderReview();
 })();

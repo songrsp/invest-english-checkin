@@ -98,6 +98,26 @@
   .foot{text-align:center;color:var(--faint);font-size:12px;margin-top:4px;line-height:1.6}
   .foot a{color:var(--dim)}
   .reset{background:none;border:none;color:var(--faint);font-size:11px;cursor:pointer;text-decoration:underline;margin-top:6px}
+
+  /* AI */
+  .ai-card .sec-t{color:#6d28d9}
+  .ai-actions{display:flex;flex-wrap:wrap;gap:8px}
+  .ai-btn{font:inherit;font-size:13px;border:1px solid #ddd6fe;background:#f5f3ff;color:#5b21b6;border-radius:9px;padding:9px 14px;cursor:pointer;transition:background .15s}
+  .ai-btn:hover{background:#ede9fe}
+  .ai-btn:disabled{opacity:.55;cursor:default}
+  .ai-out{margin-top:12px;background:#faf8ff;border:1px solid #ece8fb;border-radius:10px;padding:12px 14px;font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word;display:none}
+  .ai-out.show{display:block}
+  .ai-out b{color:#5b21b6}
+  .ai-loading{color:#8b5cf6;font-size:13px}
+  .ai-ta{width:100%;min-height:72px;font:inherit;font-size:14px;border:1px solid var(--line);border-radius:9px;padding:10px;resize:vertical;margin-bottom:8px}
+  .quiz-q{margin:10px 0;padding:10px 12px;border:1px solid var(--line);border-radius:9px}
+  .quiz-q .qt{font-weight:600;margin-bottom:6px;font-size:14px}
+  .quiz-opt{display:block;width:100%;text-align:left;font:inherit;font-size:13px;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 10px;margin:5px 0;cursor:pointer}
+  .quiz-opt:hover{background:#f6f5fb}
+  .quiz-opt.correct{background:var(--green-bg);border-color:var(--green-l);color:#14532d}
+  .quiz-opt.wrong{background:#fdecec;border-color:#f5c2c2;color:#9b1c1c}
+  .quiz-exp{font-size:13px;color:var(--dim);margin-top:6px;display:none}
+  .quiz-exp.show{display:block}
 </style>
 </head>
 <body>
@@ -146,7 +166,29 @@
     </div>
     <div class="word-bar">
       <span class="idx" id="wIdx"></span>
-      <button class="btn" id="wNext">下一个 →</button>
+      <span style="display:flex;gap:8px">
+        <button class="ai-btn" id="wExplain">🤖 AI 讲解</button>
+        <button class="btn" id="wNext">下一个 →</button>
+      </span>
+    </div>
+    <div class="ai-out" id="wordOut"></div>
+  </div>
+
+  <!-- AI 学习助手 -->
+  <div class="card ai-card">
+    <div class="sec-t">🤖 AI 学习助手（gpt-5.4-mini）</div>
+    <div class="ai-actions">
+      <button class="ai-btn" id="aiQuiz">📝 今日小测验</button>
+      <button class="ai-btn" id="aiDaily">📰 生成今日学习内容</button>
+    </div>
+    <div class="ai-out" id="quizOut"></div>
+    <div class="ai-out" id="dailyOut"></div>
+
+    <div style="margin-top:16px">
+      <div class="sec-t" style="margin-bottom:8px">🔍 解析英文句子（粘贴财报/新闻里的英文）</div>
+      <textarea class="ai-ta" id="sentIn" placeholder="粘贴一句英文，例如：The company raised its full-year guidance on strong data center demand."></textarea>
+      <button class="ai-btn" id="aiSent">解析这句</button>
+      <div class="ai-out" id="sentOut"></div>
     </div>
   </div>
 
@@ -350,6 +392,129 @@
   renderAll();
   renderWeekend();
   initWord();
+})();
+</script>
+<script>
+/* ===== AI 学习助手 ===== */
+(function(){
+  "use strict";
+  var AI_ENDPOINT = "https://yellow-meadow-eb3f.song1214116.workers.dev/";
+
+  function esc(s){ return String(s).replace(/[&<>]/g, function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
+  function fmt(s){ return esc(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>"); }
+  function show(el, html){ el.innerHTML = html; el.classList.add("show"); }
+  function err(el, e){ show(el, '<span style="color:#b91c1c">出错了：'+esc(e && e.message ? e.message : e)+'</span>'); }
+  function loading(el, msg){ show(el, '<span class="ai-loading">'+ esc(msg||"思考中…") +'</span>'); }
+
+  async function callAI(opts){
+    var res, data;
+    try{
+      res = await fetch(AI_ENDPOINT, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ system: opts.system||"", prompt: opts.prompt||"", max_tokens: opts.max_tokens||1024 })
+      });
+      data = await res.json();
+    }catch(e){ throw new Error("网络/接口错误（检查 AI Worker）"); }
+    if(!res.ok || (data && data.error)){
+      throw new Error(data && data.error ? String(data.error) : ("HTTP "+res.status));
+    }
+    return (data.text||"").trim();
+  }
+
+  function busy(btn, on, label){
+    if(!btn) return;
+    if(on){ btn.dataset.t = btn.textContent; btn.textContent = label||"生成中…"; btn.disabled = true; }
+    else { if(btn.dataset.t) btn.textContent = btn.dataset.t; btn.disabled = false; }
+  }
+  function bind(id, fn){ var el=document.getElementById(id); if(el) el.addEventListener("click", function(){ fn(el); }); }
+
+  // 1) 单词 AI 讲解
+  bind("wExplain", async function(btn){
+    var word = (document.getElementById("wEn").textContent||"").trim();
+    var out = document.getElementById("wordOut");
+    if(!word || word==="—") return;
+    busy(btn, true, "讲解中…"); loading(out, "正在讲解 "+word+" …");
+    try{
+      var t = await callAI({
+        system:"你是帮助中文母语者学英语的老师，结合美股投资语境。用简体中文，简洁。",
+        prompt:"讲解英文词条「"+word+"」，分四部分：\n**释义**（中文，含投资语境）\n**音标**（IPA）\n**例句**（一个投资语境英文句 + 中文翻译）\n**记忆法**（词根或联想）\n用 **小标题** 分隔，别啰嗦。",
+        max_tokens:500
+      });
+      show(out, fmt(t));
+    }catch(e){ err(out, e); } finally{ busy(btn, false); }
+  });
+
+  // 2) 今日小测验
+  bind("aiQuiz", async function(btn){
+    var out = document.getElementById("quizOut");
+    busy(btn, true, "出题中…"); loading(out, "正在出题…");
+    try{
+      var t = await callAI({
+        system:"你是英语词汇测验出题老师。只输出严格 JSON，无多余文字、无代码块标记。",
+        prompt:'基于美股投资英语高频词出 4 道选择题。严格输出 JSON：{"quiz":[{"q":"题干","options":["A","B","C","D"],"answer":0,"explain":"中文解析"}]}。answer 是正确项下标(0-3)。考查 revenue, gross margin, guidance, moat, capex, backlog, dividend, valuation 等。',
+        max_tokens:900
+      });
+      renderQuiz(out, t);
+    }catch(e){ err(out, e); } finally{ busy(btn, false); }
+  });
+
+  function renderQuiz(out, text){
+    var data;
+    try{ var m = text.match(/\{[\s\S]*\}/); data = JSON.parse(m ? m[0] : text); }
+    catch(e){ show(out, fmt(text)); return; }
+    var quiz = (data && data.quiz) || [];
+    if(!quiz.length){ show(out, fmt(text)); return; }
+    out.innerHTML = ""; out.classList.add("show");
+    quiz.forEach(function(item, qi){
+      var box = document.createElement("div"); box.className="quiz-q";
+      var qt = document.createElement("div"); qt.className="qt"; qt.textContent=(qi+1)+". "+(item.q||""); box.appendChild(qt);
+      var exp = document.createElement("div"); exp.className="quiz-exp"; exp.textContent="✓ "+(item.explain||"");
+      (item.options||[]).forEach(function(opt, oi){
+        var b = document.createElement("button"); b.className="quiz-opt"; b.textContent=opt;
+        b.addEventListener("click", function(){
+          if(box.dataset.done) return; box.dataset.done="1";
+          Array.prototype.forEach.call(box.querySelectorAll(".quiz-opt"), function(bn, bi){
+            if(bi===item.answer) bn.classList.add("correct");
+            if(bi===oi && oi!==item.answer) bn.classList.add("wrong");
+          });
+          exp.classList.add("show");
+        });
+        box.appendChild(b);
+      });
+      box.appendChild(exp); out.appendChild(box);
+    });
+  }
+
+  // 3) 解析英文句子
+  bind("aiSent", async function(btn){
+    var inp = document.getElementById("sentIn"), out = document.getElementById("sentOut");
+    var s = (inp.value||"").trim();
+    if(!s){ loading(out, "先粘贴一句英文～"); return; }
+    busy(btn, true, "解析中…"); loading(out, "解析中…");
+    try{
+      var t = await callAI({
+        system:"你是英语精读老师，面向中文母语的投资学习者。用简体中文。",
+        prompt:"解析这句英文：\n\""+s+"\"\n给出：\n**翻译**（中文）\n**结构**（主谓宾/从句拆解，简洁）\n**重点词/搭配**（3-5 个，英文+中文）\n用 **小标题** 分隔。",
+        max_tokens:700
+      });
+      show(out, fmt(t));
+    }catch(e){ err(out, e); } finally{ busy(btn, false); }
+  });
+
+  // 4) 生成今日学习内容
+  bind("aiDaily", async function(btn){
+    var out = document.getElementById("dailyOut");
+    busy(btn, true, "生成中…"); loading(out, "生成中…");
+    try{
+      var t = await callAI({
+        system:"你是英语学习内容创作者，面向中文母语的美股投资学习者。讲解用简体中文。",
+        prompt:"生成今天的投资英语学习内容：\n**English**：一段 3-4 句英文短文，主题是 AI 半导体/美股投资中的一个真实概念。\n**中文翻译**\n**重点词**：从短文挑 3 个高频词，英文+中文。\n用 **小标题** 分隔。",
+        max_tokens:800
+      });
+      show(out, fmt(t));
+    }catch(e){ err(out, e); } finally{ busy(btn, false); }
+  });
 })();
 </script>
 <script>

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>投资 × 英语 · 每日打卡</title>
+<!-- PWA -->
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#1f9d55">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="投资打卡">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<style>
+  :root{
+    color-scheme: light;
+    --bg:#f4f6f8; --card:#ffffff; --ink:#1f2933; --dim:#6b7280; --faint:#9aa5b1;
+    --line:#e4e8ec; --green:#1f9d55; --green-l:#d6f0e0; --green-bg:#eef9f1;
+    --blue:#2563eb; --blue-l:#e6efff; --amber:#d97706; --gold:#f6c453;
+    --r:14px; --shadow:0 1px 3px rgba(20,30,40,.06),0 6px 20px rgba(20,30,40,.05);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.55;
+    padding:24px 16px 60px; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:20px 22px}
+
+  /* header */
+  .head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .head h1{font-size:20px;letter-spacing:.3px}
+  .head .date{color:var(--dim);font-size:13px;margin-top:3px}
+  .streak{display:flex;gap:18px;text-align:center}
+  .streak .n{font-size:26px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+  .streak .n.fire{color:var(--amber)}
+  .streak .k{font-size:11px;color:var(--faint);margin-top:4px;letter-spacing:.5px}
+
+  /* progress */
+  .pbar{height:8px;background:#eef1f4;border-radius:99px;overflow:hidden;margin:14px 0 4px}
+  .pbar i{display:block;height:100%;background:linear-gradient(90deg,#34d27e,#1f9d55);width:0;transition:width .35s ease}
+  .ptext{font-size:12px;color:var(--dim);display:flex;justify-content:space-between}
+
+  /* tasks */
+  .task{display:flex;align-items:center;gap:12px;padding:12px 12px;border:1px solid var(--line);border-radius:10px;margin-top:10px;cursor:pointer;transition:background .15s,border-color .15s;user-select:none}
+  .task:hover{background:#fafbfc}
+  .task.on{background:var(--green-bg);border-color:var(--green-l)}
+  .box{width:22px;height:22px;border:2px solid #cfd6dd;border-radius:6px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;transition:all .15s}
+  .task.on .box{background:var(--green);border-color:var(--green)}
+  .box svg{width:13px;height:13px;stroke:#fff;stroke-width:3.5;fill:none;opacity:0;transition:opacity .15s}
+  .task.on .box svg{opacity:1}
+  .task .ic{font-size:17px}
+  .task .lb{font-size:14px}
+  .task.on .lb{color:#14532d}
+
+  .done-banner{display:none;margin-top:14px;background:var(--green-bg);border:1px solid var(--green-l);color:#14532d;border-radius:10px;padding:12px 14px;font-size:14px;text-align:center;font-weight:600}
+  .done-banner.show{display:block}
+
+  /* section title */
+  .sec-t{font-size:12px;letter-spacing:1px;color:var(--faint);text-transform:uppercase;margin-bottom:12px;font-weight:600}
+
+  /* weekend */
+  .weekend{display:none;background:var(--blue-l);border-color:#cfe0ff}
+  .weekend.show{display:block}
+  .weekend .sec-t{color:var(--blue)}
+
+  /* word card */
+  .word{cursor:pointer;text-align:center;padding:26px 18px;border:1px dashed #cdd5dd;border-radius:12px;background:#fbfcfd;position:relative;user-select:none}
+  .word .en{font-size:24px;font-weight:700;letter-spacing:.3px}
+  .word .zh{font-size:18px;color:var(--blue);margin-top:8px;min-height:24px}
+  .word .hint{position:absolute;right:12px;bottom:8px;font-size:11px;color:var(--faint)}
+  .word-bar{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+  .word-bar .idx{font-size:12px;color:var(--faint)}
+  .btn{font:inherit;font-size:13px;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:7px 14px;cursor:pointer;transition:background .15s}
+  .btn:hover{background:#f3f5f7}
+
+  /* heatmap */
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cell{aspect-ratio:1;border-radius:5px;background:#eceff2;position:relative}
+  .cell.full{background:var(--green)}
+  .cell.part{background:#a7e0bf}
+  .cell.today{outline:2px solid var(--blue);outline-offset:1px}
+  .cell .tip{display:none;position:absolute;bottom:120%;left:50%;transform:translateX(-50%);background:#1f2933;color:#fff;font-size:11px;padding:3px 7px;border-radius:5px;white-space:nowrap;z-index:5}
+  .cell:hover .tip{display:block}
+  .legend{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-top:10px;font-size:11px;color:var(--faint)}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+  /* resources */
+  .links{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .links a{display:block;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px;transition:background .15s,border-color .15s}
+  .links a:hover{background:#f3f7ff;border-color:#cfe0ff}
+  .links a .t{font-weight:600}
+  .links a .d{font-size:11px;color:var(--faint);margin-top:2px}
+
+  .foot{text-align:center;color:var(--faint);font-size:12px;margin-top:4px;line-height:1.6}
+  .foot a{color:var(--dim)}
+  .reset{background:none;border:none;color:var(--faint);font-size:11px;cursor:pointer;text-decoration:underline;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="card">
+    <div class="head">
+      <div>
+        <h1>📈 投资 × 英语 · 每日打卡</h1>
+        <div class="date" id="todayDate"></div>
+      </div>
+      <div class="streak">
+        <div><div class="n fire" id="streakN">0</div><div class="k">连续天数</div></div>
+        <div><div class="n" id="bestN">0</div><div class="k">最长连续</div></div>
+        <div><div class="n" id="totalN">0</div><div class="k">累计完成</div></div>
+      </div>
+    </div>
+    <div class="pbar"><i id="pbar"></i></div>
+    <div class="ptext"><span id="ptext">今天还没开始</span><span id="pcount">0 / 4</span></div>
+    <div class="done-banner" id="doneBanner">🎉 今日打卡完成！开口练了就是赢，明天见。</div>
+  </div>
+
+  <!-- TODAY TASKS -->
+  <div class="card">
+    <div class="sec-t">今日任务（约 30–40 分钟 · 全部勾选即完成打卡）</div>
+    <div id="tasks"></div>
+  </div>
+
+  <!-- WEEKEND BONUS -->
+  <div class="card weekend" id="weekend">
+    <div class="sec-t">🎬 周末加餐（不计入连续，但很值得）</div>
+    <div style="font-size:14px;color:#1e40af">
+      看完 1 集 <b>Asianometry</b> 或 <b>Acquired</b>（带字幕，台积电/英伟达专集最香），
+      然后用本周学到的词写一段 <b>3–5 句英文小结</b>——强制输出，练写作 + 巩固词汇。
+    </div>
+  </div>
+
+  <!-- WORD OF DAY -->
+  <div class="card">
+    <div class="sec-t">今日单词（点卡片看中文 · 来自你的报告高频词）</div>
+    <div class="word" id="wordCard">
+      <div class="en" id="wEn">—</div>
+      <div class="zh" id="wZh"></div>
+      <div class="hint">点击翻面</div>
+    </div>
+    <div class="word-bar">
+      <span class="idx" id="wIdx"></span>
+      <button class="btn" id="wNext">下一个 →</button>
+    </div>
+  </div>
+
+  <!-- HEATMAP -->
+  <div class="card">
+    <div class="sec-t">最近 35 天</div>
+    <div class="grid" id="heat"></div>
+    <div class="legend">
+      <span>少</span>
+      <i style="background:#eceff2"></i><i style="background:#a7e0bf"></i><i style="background:#1f9d55"></i>
+      <span>多</span>
+    </div>
+  </div>
+
+  <!-- RESOURCES -->
+  <div class="card">
+    <div class="sec-t">🔗 快捷资源（点击在浏览器打开）</div>
+    <div class="links">
+      <a href="https://www.investopedia.com/financial-term-dictionary-4769738" target="_blank"><div class="t">Investopedia</div><div class="d">金融词条字典 · 查词首选</div></a>
+      <a href="https://www.youtube.com/@Asianometry" target="_blank"><div class="t">Asianometry</div><div class="d">半导体产业 · 你的主场</div></a>
+      <a href="https://www.acquired.fm/episodes" target="_blank"><div class="t">Acquired 播客</div><div class="d">台积电/英伟达深度长集</div></a>
+      <a href="https://pages.stern.nyu.edu/~adamodar/" target="_blank"><div class="t">Damodaran 估值</div><div class="d">免费估值公开课</div></a>
+      <a href="https://www.youtube.com/@PBoyle" target="_blank"><div class="t">Patrick Boyle</div><div class="d">市场与宏观 · 进阶</div></a>
+      <a href="https://www.fool.com/earnings-call-transcripts/" target="_blank"><div class="t">财报电话会稿</div><div class="d">精读+朗读素材</div></a>
+      <a href="https://www.sec.gov/edgar/search/" target="_blank"><div class="t">SEC EDGAR</div><div class="d">10-K/10-Q 一手财报</div></a>
+      <a href="https://apps.ankiweb.net/" target="_blank"><div class="t">Anki</div><div class="d">间隔重复记单词</div></a>
+    </div>
+  </div>
+
+  <div class="foot">
+    打卡记录保存在本浏览器本地（不上传）。建议用固定浏览器打开并加书签。<br>
+    与《投资×英语 同步学习方案》《我的美股投资学习路线》配套使用。
+    <br><button class="reset" id="resetBtn">清空所有打卡记录</button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var KEY = "inv_en_checkins_v1";
+  var TASKS = [
+    {key:"read",   ic:"📖", lb:"阅读精读 1 段（财报/新闻，查生词记 Anki）"},
+    {key:"speak",  ic:"🗣️", lb:"朗读 / 跟读 1 段电话会稿（录音对比，治哑巴英语）"},
+    {key:"listen", ic:"🎧", lb:"字幕精听 1–3 分钟（盲听→对字幕→再盲听）"},
+    {key:"anki",   ic:"🔁", lb:"Anki 复习当天 + 旧卡片"}
+  ];
+  var WORDS = [
+    ["revenue / top line","营收"],["gross margin","毛利率"],["net income / bottom line","净利润"],
+    ["operating cash flow","经营现金流"],["free cash flow (FCF)","自由现金流"],["capex","资本开支"],
+    ["guidance","业绩指引"],["raise / cut guidance","上调/下调指引"],["beat and raise","超预期并上调"],
+    ["miss (estimates)","不及预期"],["backlog","积压订单"],["bookings / orders","订单"],
+    ["moat","护城河"],["market share","市场份额"],["valuation","估值"],["forward P/E","前瞻市盈率"],
+    ["PEG ratio","市盈增长比"],["priced in","已被股价反映"],["overvalued","高估"],["undervalued","低估"],
+    ["upside","上行空间"],["downside","下行风险"],["headwind","逆风"],["tailwind","顺风"],
+    ["dilution","股本稀释"],["ROIC","资本回报率"],["balance sheet","资产负债表"],
+    ["income statement","利润表"],["cash flow statement","现金流量表"],["earnings call","财报电话会"],
+    ["transcript","文字稿"],["10-K / 10-Q","年报 / 季报"],["SEC filing","向SEC提交的文件"],
+    ["dividend","股息"],["dividend yield","股息率"],["payout ratio","派息率"],["buyback","股票回购"],
+    ["structural demand","结构性需求"],["cyclical","周期性的"],["supply constraint","供给约束"],
+    ["sold out","售罄"],["foundry","晶圆代工"],["advanced packaging","先进封装"],["yield","良率"],
+    ["hyperscaler","超大规模云厂商"],["data center","数据中心"],["allocation","配置"],
+    ["position (size)","仓位"],["hedge","对冲"],["margin of safety","安全边际"]
+  ];
+
+  function pad(n){return n<10?"0"+n:""+n;}
+  function fmt(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+  function today(){return new Date();}
+  function todayStr(){return fmt(today());}
+
+  function load(){
+    try{var s=localStorage.getItem(KEY);return s?JSON.parse(s):{};}catch(e){return {};}
+  }
+  function save(data){
+    try{localStorage.setItem(KEY,JSON.stringify(data));}catch(e){}
+  }
+  function rec(data,ds){return data[ds]||{};}
+  function countDone(r){var c=0;for(var i=0;i<TASKS.length;i++){if(r[TASKS[i].key])c++;}return c;}
+  function isComplete(r){return countDone(r)===TASKS.length;}
+
+  function computeStreak(data){
+    var d=today(); var streak=0;
+    if(!isComplete(rec(data,todayStr()))){ d.setDate(d.getDate()-1); }
+    while(isComplete(rec(data,fmt(d)))){ streak++; d.setDate(d.getDate()-1); }
+    return streak;
+  }
+  function computeStats(data){
+    var keys=Object.keys(data).sort();
+    var total=0, best=0, run=0, prev=null;
+    for(var i=0;i<keys.length;i++){
+      if(!isComplete(data[keys[i]])) continue;
+      total++;
+      var cur=new Date(keys[i]+"T00:00:00");
+      if(prev){
+        var diff=Math.round((cur-prev)/86400000);
+        run = (diff===1)? run+1 : 1;
+      }else{ run=1; }
+      if(run>best) best=run;
+      prev=cur;
+    }
+    return {total:total, best:best};
+  }
+
+  var data = load();
+
+  // ---- render tasks ----
+  var tasksEl=document.getElementById("tasks");
+  function renderTasks(){
+    var r=rec(data,todayStr());
+    tasksEl.innerHTML="";
+    TASKS.forEach(function(t){
+      var on = !!r[t.key];
+      var div=document.createElement("div");
+      div.className="task"+(on?" on":"");
+      div.innerHTML='<span class="box"><svg viewBox="0 0 24 24"><polyline points="4 12 10 18 20 6"/></svg></span>'+
+                    '<span class="ic">'+t.ic+'</span><span class="lb">'+t.lb+'</span>';
+      div.addEventListener("click",function(){ toggle(t.key); });
+      tasksEl.appendChild(div);
+    });
+  }
+  function toggle(key){
+    var ds=todayStr();
+    if(!data[ds]) data[ds]={};
+    data[ds][key] = !data[ds][key];
+    save(data);
+    renderAll();
+  }
+
+  // ---- progress ----
+  function renderProgress(){
+    var r=rec(data,todayStr());
+    var c=countDone(r);
+    document.getElementById("pbar").style.width=(c/TASKS.length*100)+"%";
+    document.getElementById("pcount").textContent=c+" / "+TASKS.length;
+    var pt=document.getElementById("ptext");
+    if(c===0) pt.textContent="今天还没开始 · 先开口读一段吧";
+    else if(c<TASKS.length) pt.textContent="进行中，继续！";
+    else pt.textContent="全部完成 ✓";
+    document.getElementById("doneBanner").className="done-banner"+(c===TASKS.length?" show":"");
+  }
+
+  // ---- streak/stats ----
+  function renderStats(){
+    var st=computeStats(data);
+    document.getElementById("streakN").textContent=computeStreak(data);
+    document.getElementById("bestN").textContent=st.best;
+    document.getElementById("totalN").textContent=st.total;
+  }
+
+  // ---- heatmap (last 35 days) ----
+  function renderHeat(){
+    var el=document.getElementById("heat"); el.innerHTML="";
+    var days=[]; var d=today();
+    for(var i=34;i>=0;i--){ var x=new Date(); x.setDate(d.getDate()-i); days.push(x); }
+    var ts=todayStr();
+    days.forEach(function(x){
+      var ds=fmt(x); var r=rec(data,ds); var c=countDone(r);
+      var cls="cell"; if(isComplete(r)) cls+=" full"; else if(c>0) cls+=" part";
+      if(ds===ts) cls+=" today";
+      var div=document.createElement("div"); div.className=cls;
+      div.innerHTML='<span class="tip">'+ds+' · '+c+'/'+TASKS.length+'</span>';
+      el.appendChild(div);
+    });
+  }
+
+  // ---- weekend ----
+  function renderWeekend(){
+    var wd=today().getDay(); // 0 Sun, 6 Sat
+    document.getElementById("weekend").className="card weekend"+((wd===0||wd===6)?" show":"");
+  }
+
+  // ---- word of day ----
+  var wordIdx, flipped=false;
+  function dayOfYear(){ var n=today(); var s=new Date(n.getFullYear(),0,0); return Math.floor((n-s)/86400000); }
+  function showWord(){
+    var w=WORDS[((wordIdx%WORDS.length)+WORDS.length)%WORDS.length];
+    document.getElementById("wEn").textContent=w[0];
+    document.getElementById("wZh").textContent=flipped?w[1]:"";
+    document.getElementById("wIdx").textContent=(((wordIdx%WORDS.length)+WORDS.length)%WORDS.length+1)+" / "+WORDS.length;
+  }
+  function initWord(){
+    wordIdx=dayOfYear()%WORDS.length;
+    document.getElementById("wordCard").addEventListener("click",function(){ flipped=!flipped; showWord(); });
+    document.getElementById("wNext").addEventListener("click",function(e){ e.stopPropagation(); wordIdx++; flipped=false; showWord(); });
+    showWord();
+  }
+
+  function renderAll(){ renderTasks(); renderProgress(); renderStats(); renderHeat(); }
+
+  // ---- date header ----
+  (function(){
+    var wk=["星期日","星期一","星期二","星期三","星期四","星期五","星期六"];
+    var d=today();
+    document.getElementById("todayDate").textContent=d.getFullYear()+" 年 "+(d.getMonth()+1)+" 月 "+d.getDate()+" 日 · "+wk[d.getDay()];
+  })();
+
+  document.getElementById("resetBtn").addEventListener("click",function(){
+    if(confirm("确定清空所有打卡记录？此操作不可恢复。")){ data={}; save(data); renderAll(); }
+  });
+
+  renderAll();
+  renderWeekend();
+  initWord();
+})();
+</script>
+<script>
+  /* 注册 Service Worker：让 app 离线可用 */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("./sw.js").catch(function(){});
+    });
+  }
+</script>
+</body>
+</html>
